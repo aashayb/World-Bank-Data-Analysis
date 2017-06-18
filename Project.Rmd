@@ -1,0 +1,223 @@
+---
+output:
+  word_document: default
+  html_document: default
+---
+## Introduction
+The following project tries to understand trends when it comes to life expectancy and unemployment of people from various countries of the world. The data was retrieved from the World Bank, and contains details about health and population statistics from 2001 - 2015.  
+
+## Data Setup
+Here is a Summary of the data that we shal use. 
+```{r}
+data<-read.csv("Health and Population Statistics_Data.csv")
+dim(data)
+str(data)
+tail(data)
+```
+We see that the data after row 962 is not useful, hence we shall remove it. Also, we shall clean the given data to change the column names into identifiable years. 
+```{r,warning=FALSE}
+data<-data[1:962,]
+names(data)<-(c("Series","sCode","Country","cCode",2001:2015)) ## Simplifying the names
+```
+ 
+
+## Exploratory Data Analysis  
+
+### 1. One Variable Analysis
+In this section we shall analyze the avearge life expectancy of males, and females, along with the avearage life expectancy irrespective of gender.
+```{r,warning=FALSE}
+require(ggplot2)
+lm <- data[data$sCode == "SP.DYN.LE00.MA.IN",-c(1:4)] ## Life Expectancy of males
+lf <- data[data$sCode == "SP.DYN.LE00.FE.IN",-c(1:4)] ## Life Expectancy of females
+lt <- data[data$sCode == "SP.DYN.LE00.IN",-c(1:3,5:17,19)] ## Life Expectancy, total for 2014
+
+## Finding the Columnwise average:
+avglm <- apply(apply(lm,2,as.numeric),2,mean,na.rm=TRUE)
+avglf <- apply(apply(lf,2,as.numeric),2,mean,na.rm=TRUE)
+lt$`2014`<-as.numeric(as.character(lt$`2014`))
+avglt<-lt$`2014`
+names(avglt)<-lt$cCode
+avglt<-avglt[!is.na(avglt)]
+```
+  
+Now we shall plot each of these values: 
+
+```{r}
+
+ ## Graph for life expectancy of males.
+barplot((avglm[1:14]),main = "Avearge Life Expectancy of males",xlab = "Year",ylab = "Average Life Expectancy", col = "lightblue", border = "darkred",ylim = c(65,80),xpd = FALSE)
+
+ ## Graph for life expectancy of females.
+barplot((avglf[1:14]),main = "Avearge Life Expectancy of females",xlab = "Year",ylab = "Average Life Expectancy", col = "lightblue", border = "darkred",ylim = c(65,80),xpd = FALSE)
+
+ ## Graph for total life expectancy by country
+b <- barplot(avglt,main = "Avearge Total Life Expectancy for 2014",xlab = "Country",ylab = "Average Life Expectancy", col = "red", border = "darkred",ylim = c(50,100),xpd = FALSE,xaxt="n",density = 25)
+axis(1,b,names(avglt),las=3,cex.axis = 0.6)
+```
+  
+The graphs show a similar increase in life expectancy from 2001 to 2014. The life expectancy of males has always been lesser than that of females. Also we see that in 2014, Honk Kong had the highest average life expectancy.
+  
+### 2. Two Variable analysis  
+#### a) Total Fertility Rate(ie Births per woman), vs Unemployment rate(ie % of total labor force).  
+We shall do this for the year 2014, and try to establish a relationship between the two variables. The motive here, is to see whether a high number of Births per woman(a very rough estimate of population), results in more Unemployment. 
+```{r,warning=FALSE}
+samp <- data[(data$Series == "Unemployment, total (% of total labor force)" | data$Series == "Fertility rate, total (births per woman)"),-c(2,5:17,19)] ## This gives us the required data for 2014.
+samp[,4]<-as.numeric(as.character(samp[,4]))
+
+samp <- na.omit(samp) ## Remove all countires, the data of which is not available.
+u <- samp[samp$Series=="Unemployment, total (% of total labor force)",2:4] ## Contains Data about unemployment
+names(u)<-c("Country","cCode","Unemployment Value")
+f <- samp[samp$Series == "Fertility rate, total (births per woman)",2:4] ## Contains Data about fertility
+names(f)<-c("Country","cCode","Fertility Value")
+
+## Cleaning the Data in the desired manner
+samp <- merge(f,u,by=c("Country","cCode")) 
+samp <- samp[order(samp$`Fertility Value`),]
+rm(f,u)
+print(samp)
+gfu <- ggplot(samp,aes(`Fertility Value`,`Unemployment Value`))+
+  geom_point(color="darkred")+
+  labs(title = "Fertility Rate vs Total Unemployment in 2014",y="Unemployment, total (% of total labor force)",x="Fertility rate, total (births per woman)")+
+  geom_text(aes(samp$`Fertility Value`,samp$`Unemployment Value`),label = samp$cCode,size=2.2,nudge_x = -.1)
+  
+print(gfu)
+
+```
+  
+  
+The graph above, reflects the Unemployment in some countries against the fertility rate for the year 2014. This graph will be further analyzed in the upcoming sections.  
+  
+
+#### b) School enrollment, tertiary (% gross), vs Unemployment rate(ie % of total labor force).  
+We shall consider Unemployment of the year 2014, while Primary school Enrollment of the year 2010. As the people enrolled in Tertiary school in 2010, would form a part of the working population in 2014. Then, we will try to establish a relationship between the two variables. The motive here, is to see whether primary education, affects Unemployment. 
+```{r,warning=FALSE}
+samp2 <- data[data$Series == "Unemployment, total (% of total labor force)",c(1,3,4,18)]
+##We select the column numbers 1,3,4,18 for the required data
+
+names(samp2)<-names(data[,c(1,3,4,14)])
+## The change in name is to facilitate rbind
+
+samp2<-rbind(samp2,data[data$Series == "School enrollment, tertiary (% gross)",c(1,3,4,14)])
+##rbind combines the two sampled data frames into 1
+
+## This gives us the required data .
+
+samp2[,4]<-as.numeric(as.character(samp2[,4]))
+samp2 <- na.omit(samp2) ## Remove all countires, the data of which is not available.
+u <- samp2[samp2$Series=="Unemployment, total (% of total labor force)",2:4] ## Contains Data about unemployment
+names(u)<-c("Country","cCode","Unemployment Value")
+f <- samp2[samp2$Series == "School enrollment, tertiary (% gross)",2:4] 
+names(f)<-c("Country","cCode","School Enrollment")
+
+## Cleaning the Data in the desired manner
+samp2 <- merge(f,u,by=c("Country","cCode")) 
+samp2 <- samp2[order(samp2$`Unemployment Value`),]
+rm(f,u)
+print(samp2)
+gsu <- ggplot(samp2,aes(`School Enrollment`,`Unemployment Value`))+
+  geom_point(color="darkred")+
+  labs(title = "School Enrollment vs Total Unemployment",y="Unemployment, total (% of total labor force)",x="School enrollment, tertiary (% gross)")+
+  geom_text(aes(samp2$`School Enrollment`,samp2$`Unemployment Value`),label = samp2$cCode,size=2.5,nudge_y = -.2)
+  
+print(gsu)
+
+```
+  
+  
+The graph above, reflects the Unemployment in some countries(in 2014) against tertiary school enrollment(in 2010). This graph will be further analyzed in the upcoming sections.  
+  
+  
+## Advanced Analysis  
+
+### 1. Clustering
+k-means clustering is another simple way of examining and organizing multi-dimensional data. As with hierarchical clustering, this technique is most useful in the early stages of analysis when you're trying to get an understanding of the data, e.g., finding some pattern or relationship between different factors or variables. **We shall try to cluster countries with respect to GNI per capita in the year 2014**
+
+```{r,warning=FALSE}
+gni<-data[data$Series=="GNI per capita, Atlas method (current US$)",c(3,4,18)]
+## Storing the GNI for 2014, along with Country name and Code
+
+gni[,3]<-as.numeric(as.character(gni[,3]))
+gni<-gni[!is.na(gni[,3]),]
+## Removing Data which is not available
+```
+  
+First, we shall try to estimate the number of centers. We shall use histograms as we are analyzing univariable data:
+
+```{r}
+hist(gni$`2014`)
+```
+  
+We see that broadly, there are 2 clusters, hence we shall perform kmeans clustering with 2 centers:
+```{r}
+gniClust <- kmeans(gni[,3],2,100)
+gniClust$size ## Gives us the size of each cluster
+gniClust$centers ## Gives us the 2 centers
+```
+  
+Now we shall plot the GNI per capita of each country using ggplot:
+```{r,warning=FALSE}
+gniClust$cluster <- as.factor(gniClust$cluster)
+cp <- ggplot(data = gni,mapping = aes(x=gni$Country,y=gni$`2014`))+
+  geom_point(aes(color = gniClust$cluster))+
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        legend.title = element_blank())+
+  ylab("GNI per capita")+
+  labs(title = "GNI per Capita in 2014")+
+  geom_text(aes(x=gni$Country,y=gni$`2014`),label = as.character(gni$cCode),size=2.5,size=2.5,nudge_y = -1500)
+
+cp
+```
+  
+Thus we see how the countries are clustered according to the average GNI per capita for 2014.
+  
+  
+### 2. Linear regression
+Linear regression is an approach for modeling the relationship between a scalar dependent variable y and one or more explanatory variables (or independent variables) denoted X. We shall try to perform linear regression on the two bi-variable graphs that we have made so far.
+  
+#### a) Total Fertility Rate(ie Births per woman), vs Unemployment rate(ie % of total labor force). 
+
+We had built a graph for the assesment of these 2 variables earlier. The data corresponds to 2014. We shall try to fit a Linear Regresion model on this graph, and do some more analysis pertaining to regression.
+```{r,warning=FALSE}
+fit1 <- lm(samp$`Unemployment Value`~samp$`Fertility Value`)
+summary(fit1)
+
+gfu<-gfu+geom_smooth(method = "lm")
+gfu
+```
+  
+The results above can be summarized in the following manner:   
+
+* The slope of the regression line is 0.34, that is if all other parameters are constant, for a unit increase in fertility rate, Unemployment increases by 0.34% of the total population, ie, **For the given data, There is an increase in unemployment if there is an increase in population.**  
+* The p value for the slope is 0.42, which is very high than the standard, hence the above result cannot be generalized, and is insufficient for any prediction.  
+* The R-squared value is 0.03, that is, Fertility Rate accounts for only 3% of the variability in Unemployment.  
+* There is an increase in variability of unemployment rate in countries with high fertility rate. This is primarily because the little data that we have for countries with very high fertility rate.  
+  
+  
+#### b) School enrollment, tertiary (% gross), vs Unemployment rate(ie % of total labor force)
+
+We had built a graph for the assesment of these 2 variables earlier. The unemployment rate corresponds to 2014, while tertiary school enrollment corresponds to 2010. We shall try to fit a Linear Regresion model on this graph, and do some more analysis pertaining to regression.
+```{r,warning=FALSE}
+fit2 <- lm(samp2$`Unemployment Value`~samp2$`School Enrollment`)
+summary(fit2)
+
+gsu<-gsu+geom_smooth(method = "lm")
+gsu
+```
+  
+The results above can be summarized in the following manner:   
+
+* The slope of the regression line is 0.01, that is if all other parameters are constant, for a unit increase in tertiary school enrollment, Unemployment increases by 0.01% of the total population, ie, **There is an increase in unemployment if there is an increase in tertiary school enrollment**  
+* The p value for the slope is 0.50, which is very high than the standard, hence the above result cannot be generalized, and is insufficient for any prediction.  
+* The R-squared value is 0.03, that is, Fertility Rate accounts for only 3% of the variability in Unemployment.  
+
+## Coclusion
+* There has been an increase in average life expectancy from 2001 to 2014. 
+* The life expectancy of males has always been lesser than that of females. 
+* In 2014, Honk Kong had the highest average life expectancy.
+* Counries can broadly be divided into 2 clusters with respect to their GNI per capita.
+* The data is inadequate to make any prediction when it comes to the causes of unemployment in countries.
+
+## Reflections
+The analysis of the given data was a very enriching experience. Though there were cetain difficulties which were encountered: The biggest concern was the high percentage of missing data. This lead to less accurate analysis in certain sections, as certain factors with high percentage of missing data had to be ignored. But overall, this project provided a great opportunity to learn new techniques of data analysis, and was ideal for someone who is interested in this domain.
